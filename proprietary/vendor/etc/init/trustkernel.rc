@@ -1,0 +1,57 @@
+on post-fs
+    write /proc/bootprof "tkcore: prepare system ta path"
+    chown system system /vendor/app/t6
+
+    write /proc/bootprof "tkcore: prepare persist sfs"
+    mkdir /vendor/protect_f/tee
+    chown system system /vendor/protect_f/tee/
+    restorecon /vendor/protect_f/tee
+
+    start teed
+
+on property:trustkernel.fs.state=ready
+    write /proc/bootprof "tkcore: prepare sfs"
+    mkdir /data/tee
+    chown system system /data/tee
+    restorecon /data/tee
+
+    write /proc/bootprof "tkcore: prepare service provider ta path"
+    mkdir /data/tee/t6
+    chown system system /data/tee/t6
+    restorecon /data/tee/t6
+
+    start update_gatekeeper
+
+# For non-encrypted case
+on property:ro.crypto.state=unencrypted
+    setprop trustkernel.fs.state ready
+
+# For FDE/encrypted successfully
+on property:vold.decrypt=trigger_restart_framework
+    setprop trustkernel.fs.state ready
+
+# For FBE/encrypted successfully
+on property:ro.crypto.type=file && property:ro.crypto.state=encrypted
+    setprop trustkernel.fs.state ready
+
+on property:trustkernel.log.state=ready
+    write /proc/bootprof "tkcore: prepare log file"
+    restorecon /data/tee/tkcore.log
+    setprop trustkernel.log.state enable
+
+service teed /vendor/bin/teed --systapath /vendor/app/t6 --prot /vendor/protect_f/tee --sdrpmbdev /dev/block/platform/bootdevice/by-name/sdrpmb
+    user system
+    group system
+    class core
+
+service update_gatekeeper /vendor/bin/teed \
+    --update_gatekeeper \
+    --systapath /vendor/app/t6 \
+    --prot /vendor/protect_f/tee \
+    --sdrpmbdev /dev/block/platform/bootdevice/by-name/sdrpmb
+    user system
+    group system
+    class core
+    oneshot
+    disabled
+	
